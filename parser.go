@@ -311,6 +311,8 @@ func (p *parser) parseTerminalExpression() ASTNode {
 		return newLiteral(LiteralNumber, p.next().value)
 	case tokenString:
 		return newLiteral(LiteralString, p.next().value)
+	case tokenBool:
+		return newLiteral(LiteralBoolean, p.next().value)
 		//case tokenBoolean:
 
 	case tokenIdentifier:

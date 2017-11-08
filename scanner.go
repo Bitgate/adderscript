@@ -23,6 +23,7 @@ const (
 	tokenRBrack
 	tokenAssign
 	tokenString          // A string literal
+	tokenBool
 	tokenComma
 	tokenMinus
 	tokenEqual           // ==
@@ -277,6 +278,8 @@ func scanIdentifier(s *scanner) scanAction {
 		s.makeToken(tokenIf)
 	} else if value == "else" {
 		s.makeToken(tokenElse)
+	} else if value == "true" || value == "false" {
+		s.makeToken(tokenBool)
 	} else {
 		s.makeToken(tokenIdentifier)
 	}

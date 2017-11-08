@@ -26,6 +26,7 @@ type Method struct {
 	variables    []*LocalVariable
 
 	lvtIndex int
+	labelPtr int
 }
 
 type NativeMethod struct {
@@ -84,6 +85,12 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 		a.assembleMethodExpr(n, method)
 	case *ASTLiteralExpr:
 		a.assembleLiteralExpr(n, method)
+	case *ASTIfStmt:
+		a.assembleIfStmt(n, method)
+	case *ASTLogicalExpr:
+		a.assembleLogicalExpr(n, method)
+	case *ASTIdentifierExpr:
+		a.assembleIdentifierExpr(n, method)
 	default:
 		panic(fmt.Sprintf("No function to walk node: %T", node))
 	}
@@ -113,6 +120,26 @@ func (a *Assembler) assembleBlock(n *ASTBlockStatement, m *Method) {
 	}
 }
 
+func (a *Assembler) assembleIfStmt(n *ASTIfStmt, m *Method) {
+	a.assembleNode(n.condition, m)
+	lblFalse := m.newLabel()
+	lblEnd := m.newLabel()
+	m.emit(instrWithLabel(op_jz, 0, 0, 0, lblFalse.labelref, true)) // Jump if false (0) to the false block
+
+	// Encode true block (jz jumps over this if expression is false)
+	a.assembleNode(n.ifTrue, m)
+	m.emit(instrWithLabel(op_jmp, 0, 0, 0, lblEnd.labelref, true))
+
+	// Encode false block (the true block jumps over this)
+	m.emit(lblFalse)
+	if n.ifFalse != nil {
+		a.assembleNode(n.ifFalse, m)
+	}
+
+	// Add the end node - the true block jumps to this to avoid executing the false block.
+	m.emit(lblEnd)
+}
+
 func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 	var vartype = VarTypeUnresolved
 
@@ -133,11 +160,13 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 		panic("Variable redeclared: " + n.varName)
 	}
 
-	m.defineVariable(n.varName, vartype)
+	local := m.defineVariable(n.varName, vartype)
 
 	// If the local var has any expression defined, assemble it
 	if n.varValue != nil {
 		a.assembleNode(n.varValue, m)
+		// todo all types
+		m.emit(instr(op_setivar, local.index, 0, 0))
 	}
 }
 
@@ -164,6 +193,28 @@ func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	} else {
 		m.emit(instr(op_call, localMethod.index, 0, 0))
 	}
+}
+
+func (a *Assembler) assembleLogicalExpr(n *ASTLogicalExpr, m *Method) {
+	a.assembleNode(n.left, m)
+	a.assembleNode(n.right, m)
+
+	switch n.comparator {
+	case tokenEqual:
+		m.emitOp(op_eq)
+	default:
+		panic("unknown comparator node! " + strconv.Itoa(int(n.comparator)))
+	}
+}
+
+func (a *Assembler) assembleIdentifierExpr(n *ASTIdentifierExpr, m *Method) {
+	//TODO type checks
+	local := m.resolveVariable(n.identifier)
+	if local == nil {
+		panic("undefined variable: " + n.identifier)
+	}
+
+	m.emit(instr(op_getivar, local.index, 0, 0))
 }
 
 func (a *Assembler) assembleLiteralExpr(n *ASTLiteralExpr, m *Method) {
@@ -247,6 +298,12 @@ func (m *Method) emit(instruction Instruction) {
 	println(fmt.Sprintf("%+v", instruction))
 }
 
+func (m *Method) emitOp(op opcode) {
+	instruction := instr(op, 0, 0, 0)
+	m.instructions = append(m.instructions, instruction)
+	println(fmt.Sprintf("%+v", instruction))
+}
+
 func (c *ConstantPool) getInt(i int) int {
 	for k, v := range c.ints {
 		if v == i {
@@ -282,4 +339,18 @@ func (c *ConstantPool) getString(s string) int {
 
 func instr(op opcode, i int, l int, s int) Instruction {
 	return Instruction{opcode: op, i: i, l: l, s: s}
+}
+
+func instrWithLabel(op opcode, i int, l int, s int, labelId int, isRelative bool) Instruction {
+	return Instruction{opcode: op, i: i, l: l, s: s, labelref: labelId, labelRelative: isRelative}
+}
+
+func (m *Method) newLabel() Instruction {
+	lblId := m.labelPtr
+	m.labelPtr++
+
+	return Instruction{
+		opcode:        op_label,
+		labelref:      lblId,
+	}
 }

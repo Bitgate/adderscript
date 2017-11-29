@@ -59,7 +59,7 @@ func (s *scanner) markPosition(offset int) {
 }
 
 func (s *scanner) current() char {
-	if s.pos >= len(s.data) { // TODO cache len
+	if s.pos >= len(s.data) {
 		return eof
 	}
 
@@ -75,7 +75,7 @@ func (s *scanner) peek(num int) char {
 }
 
 func (s *scanner) next() char {
-	if s.pos >= len(s.data) { // TODO cache len
+	if s.pos >= len(s.data) {
 		return eof
 	}
 

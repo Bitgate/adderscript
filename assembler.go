@@ -8,8 +8,10 @@ import (
 
 type Assembler struct {
 	methods       []*Method
-	nativeMethods []*NativeMethod
+	triggers      []*Trigger
+	nativeMethods map[string]*NativeMethod
 	methodIndex   int
+	triggerIndex int
 	cpool         ConstantPool
 }
 
@@ -19,11 +21,18 @@ type ConstantPool struct {
 	strings []string
 }
 
+type Trigger struct {
+	name  string
+	label *Instruction
+	value uint64
+}
+
 type Method struct {
 	name         string
 	index        int
-	instructions []Instruction
+	instructions []*Instruction
 	variables    []*LocalVariable
+	arguments    []*LocalVariable
 
 	lvtIndex int
 	labelPtr int
@@ -35,12 +44,23 @@ type NativeMethod struct {
 }
 
 type Instruction struct {
-	opcode             // Instruction code
-	i             int  // Index of int
-	l             int  // Index of long
-	s             int  // Index of string
-	labelref      int  // Reference to label ID that will later on be translated to the address, then put into the 'i'.
-	labelRelative bool // Whether the address of the label needs to be treated as relative, or as absolute value
+	// opcode is the operation code of this instruction
+	opcode
+
+	// i is the index of the int in the constant pool
+	i int
+
+	// l is the index of the long in the constant pool
+	l int
+
+	// s is the index of the string in the constant pool
+	s int
+
+	// address is the computed address (offset) of this instruction
+	address int
+
+	// labelFunc is a function that will be called once the address of this instruction is defined. Used in labels.
+	labelFunc func(address int)
 }
 
 type LocalVariable struct {
@@ -68,6 +88,24 @@ func (a *Assembler) AssembleProgram(rootNodes []ASTNode) {
 
 	for _, v := range rootNodes {
 		a.assembleNode(v, nil)
+	}
+
+	// Compute addresses
+	address := 0
+	for _, method := range a.methods {
+		for _, instr := range method.instructions {
+			instr.address = address
+
+			// Execute instruction function if any
+			if instr.labelFunc != nil {
+				instr.labelFunc(address)
+			}
+
+			// Labels do not alter the address. They're filtered out during encoding.
+			if instr.opcode != op_label {
+				address++
+			}
+		}
 	}
 }
 
@@ -97,7 +135,28 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 }
 
 func (a *Assembler) assembleTrigger(n *ASTTrigger) {
-	//TODO
+	var trigger Trigger
+	trigger.name = n.trigger
+
+	// Verify that the filter value is a valid value.
+	// For now, values are longs only. This is subject to change.
+	parsed, err := strconv.ParseUint(n.value, 10, 64)
+	if err != nil {
+		panic(fmt.Sprintf("cannot parse trigger value into long: %s", n.value))
+	}
+
+	method := a.defineMethod("@" + n.trigger + "@" + n.value + "@" + strconv.Itoa(a.triggerIndex))
+	a.triggerIndex++
+
+	label := method.newLabel()
+	method.emit(label)
+	trigger.value = parsed
+	trigger.label = label
+
+	a.triggers = append(a.triggers, &trigger)
+
+	// Assemble the code belonging to this call
+	a.assembleNode(n.statement, method)
 }
 
 func (a *Assembler) defineProc(n *ASTProc) {
@@ -107,6 +166,18 @@ func (a *Assembler) defineProc(n *ASTProc) {
 	}
 
 	method = a.defineMethod(n.name)
+
+	// Define method parameters as local variables
+	for _, arg := range n.arguments {
+		var vt = resolveVartype(arg.argtype)
+
+		if vt == VarTypeUnresolved {
+			panic(fmt.Sprintf("unresolved variable type %s", arg.argtype))
+		}
+
+		lv := method.defineVariable(arg.name, vt)
+		method.arguments = append(method.arguments, lv)
+	}
 }
 
 func (a *Assembler) assembleProc(n *ASTProc) {
@@ -124,14 +195,23 @@ func (a *Assembler) assembleIfStmt(n *ASTIfStmt, m *Method) {
 	a.assembleNode(n.condition, m)
 	lblFalse := m.newLabel()
 	lblEnd := m.newLabel()
-	m.emit(instrWithLabel(op_jz, 0, 0, 0, lblFalse.labelref, true)) // Jump if false (0) to the false block
+
+	// JZ to lblFalse - absolute
+	jzToLblfalse := m.emit(instr(op_jz, 0, 0, 0)) // Jump if false (0) to the false block
+	lblFalse.labelFunc = func(address int) {
+		jzToLblfalse.i = address
+	}
 
 	// Encode true block (jz jumps over this if expression is false)
 	a.assembleNode(n.ifTrue, m)
-	m.emit(instrWithLabel(op_jmp, 0, 0, 0, lblEnd.labelref, true))
+	jmpToLblend := m.emit(instr(op_jmp, 0, 0, 0))
+	lblEnd.labelFunc = func(address int) {
+		jmpToLblend.i = address
+	}
 
 	// Encode false block (the true block jumps over this)
 	m.emit(lblFalse)
+
 	if n.ifFalse != nil {
 		a.assembleNode(n.ifFalse, m)
 	}
@@ -141,15 +221,7 @@ func (a *Assembler) assembleIfStmt(n *ASTIfStmt, m *Method) {
 }
 
 func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
-	var vartype = VarTypeUnresolved
-
-	if n.varType == "int" {
-		vartype = VarTypeInt
-	} else if n.varType == "long" {
-		vartype = VarTypeLong
-	} else if n.varType == "string" {
-		vartype = VarTypeString
-	}
+	var vartype = resolveVartype(n.varType)
 
 	if vartype == VarTypeUnresolved {
 		panic("Unresolved variable type: " + n.varType)
@@ -170,10 +242,24 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 	}
 }
 
+func resolveVartype(vartype string) VariableType {
+	switch vartype {
+	case "int":
+		return VarTypeInt;
+	case "long":
+		return VarTypeLong;
+	case "string":
+		return VarTypeString;
+	default:
+		return VarTypeUnresolved
+	}
+}
+
 func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	// See if this is a native method first. Likelihood is much greater.
-	nativeMethod := a.resolveNativeMethod(n.name)
+	nativeMethod := a.nativeMethods[n.name]
 	var localMethod *Method
+
 	if nativeMethod == nil {
 		localMethod = a.resolveMethod(n.name)
 
@@ -232,21 +318,19 @@ func (a *Assembler) assembleLiteralExpr(n *ASTLiteralExpr, m *Method) {
 		} else {
 			m.emit(instr(op_ipush, a.cpool.getInt(int(v)), 0, 0))
 		}
+	} else if n.literalType == LiteralBoolean {
+		if n.value == "true" {
+			m.emit(instr(op_ipush, a.cpool.getInt(int(1)), 0, 0))
+		} else {
+			m.emit(instr(op_ipush, a.cpool.getInt(int(0)), 0, 0))
+		}
+	} else {
+		panic(fmt.Sprintf("unknown literal type %d (value %s)", n.literalType, n.value))
 	}
 }
 
 func (a *Assembler) resolveMethod(name string) *Method {
 	for _, v := range a.methods {
-		if v.name == name {
-			return v
-		}
-	}
-
-	return nil
-}
-
-func (a *Assembler) resolveNativeMethod(name string) *NativeMethod {
-	for _, v := range a.nativeMethods {
 		if v.name == name {
 			return v
 		}
@@ -262,7 +346,7 @@ func (a *Assembler) defineMethod(name string) *Method {
 	method := &Method{
 		name:         name,
 		index:        index,
-		instructions: make([]Instruction, 512)[:0],
+		instructions: make([]*Instruction, 512)[:0],
 		variables:    make([]*LocalVariable, 4)[:0],
 	}
 
@@ -293,15 +377,14 @@ func (a *Method) defineVariable(name string, t VariableType) *LocalVariable {
 	return local
 }
 
-func (m *Method) emit(instruction Instruction) {
+func (m *Method) emit(instruction *Instruction) *Instruction {
 	m.instructions = append(m.instructions, instruction)
-	println(fmt.Sprintf("%+v", instruction))
+	return instruction
 }
 
 func (m *Method) emitOp(op opcode) {
 	instruction := instr(op, 0, 0, 0)
 	m.instructions = append(m.instructions, instruction)
-	println(fmt.Sprintf("%+v", instruction))
 }
 
 func (c *ConstantPool) getInt(i int) int {
@@ -337,20 +420,24 @@ func (c *ConstantPool) getString(s string) int {
 	return len(c.strings) - 1
 }
 
-func instr(op opcode, i int, l int, s int) Instruction {
-	return Instruction{opcode: op, i: i, l: l, s: s}
+func instr(op opcode, i int, l int, s int) *Instruction {
+	return &Instruction{opcode: op, i: i, l: l, s: s}
 }
 
-func instrWithLabel(op opcode, i int, l int, s int, labelId int, isRelative bool) Instruction {
-	return Instruction{opcode: op, i: i, l: l, s: s, labelref: labelId, labelRelative: isRelative}
-}
-
-func (m *Method) newLabel() Instruction {
-	lblId := m.labelPtr
+func (m *Method) newLabel() *Instruction {
 	m.labelPtr++
 
-	return Instruction{
-		opcode:        op_label,
-		labelref:      lblId,
+	return &Instruction{
+		opcode: op_label,
 	}
+}
+
+func (a *Assembler) resolveNativeMethod(opcode int) *NativeMethod {
+	for _, v := range a.nativeMethods {
+		if v.opcode == opcode {
+			return v
+		}
+	}
+
+	return nil
 }

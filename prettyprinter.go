@@ -44,7 +44,7 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 	if op == op_ipush {
 		output = fmt.Sprintf("IPUSH %d\t", a.cpool.ints[ins.i])
 	} else if op == op_nativecall {
-		output = fmt.Sprintf("NATIVECALL %s\t; id %d", a.resolveNativeMethod(ins.i).name, a.resolveNativeMethod(ins.i).opcode)
+		output = fmt.Sprintf("NATIVECALL %s\t; id %d", a.runtime.FindFunctionById(ins.i).Name, ins.i)
 	} else if op == op_jmp {
 		output = fmt.Sprintf("JMP %d\t", ins.i)
 	} else if op == op_jz {

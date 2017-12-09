@@ -1,0 +1,48 @@
+#
+# Adder Runtime Library file. Contains standard library of optional functions.
+# Additional runtimes can be provided by having Adderc detect the .adr files.
+#
+# An internal id MUST be a positive integer above zero, as zero is the internal
+# id for unresolved functions, and thus will not be resolved if used.
+#
+# Syntax:
+#   returntype method_name(argtype argname) -> internal_id;
+#
+# Examples:
+#   int get_a_number(string from) -> 1;
+#   string to_string(int number) -> 2;
+#   void print(string prefix, string message) -> 3;
+#
+# Defining listeners has a slightly different syntax, as it has to
+# have a returntype of 'listener'. The internal ids of listeners are unique
+# and do not conflict with ids of runtime methods. This means you can start counting
+# at one when defining runtime listeners. Once again, 0 is not a valid id.
+#
+# Examples:
+#   listener program_start() -> 1;
+#   listener number_typed(int number) -> 2;
+#
+# Above examples would be used in a script like:
+#
+# on program_start() {
+#     println("Program has started!");
+# }
+#
+# on number_typed(5) {
+#     println("You have typed number 5!");
+# }
+#
+# To listen for every value, and have it as a parameter, instead you can do:
+#
+# on number_typed(int number) {
+#     println("You typed: " + number + "!");
+# }
+#
+# When listening globally, it is important that your argument type matches
+# the type of the defined parameter or it will not compile.
+
+# Functions:
+void println(string line) -> 1;
+
+# Listeners:
+listener program_start() -> 1;

@@ -7,12 +7,12 @@ import (
 )
 
 type Assembler struct {
-	methods       []*Method
-	triggers      []*Trigger
-	nativeMethods map[string]*NativeMethod
-	methodIndex   int
+	methods      []*Method
+	triggers     []*Trigger
+	runtime      *AdderRuntime
+	methodIndex  int
 	triggerIndex int
-	cpool         ConstantPool
+	cpool        ConstantPool
 }
 
 type ConstantPool struct {
@@ -74,6 +74,8 @@ const (
 	VarTypeInt    VariableType = iota
 	VarTypeLong
 	VarTypeString
+	VarTypeBool
+	VarTypeVoid    // Not a variable type, but defined to be used with method types
 
 	VarTypeUnresolved VariableType = -1
 )
@@ -169,7 +171,7 @@ func (a *Assembler) defineProc(n *ASTProc) {
 
 	// Define method parameters as local variables
 	for _, arg := range n.arguments {
-		var vt = resolveVartype(arg.argtype)
+		var vt = ResolveVarType(arg.argtype)
 
 		if vt == VarTypeUnresolved {
 			panic(fmt.Sprintf("unresolved variable type %s", arg.argtype))
@@ -221,7 +223,7 @@ func (a *Assembler) assembleIfStmt(n *ASTIfStmt, m *Method) {
 }
 
 func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
-	var vartype = resolveVartype(n.varType)
+	var vartype = ResolveVarType(n.varType)
 
 	if vartype == VarTypeUnresolved {
 		panic("Unresolved variable type: " + n.varType)
@@ -242,22 +244,33 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 	}
 }
 
-func resolveVartype(vartype string) VariableType {
-	switch vartype {
+func ResolveVarType(varType string) VariableType {
+	switch varType {
 	case "int":
-		return VarTypeInt;
+		return VarTypeInt
 	case "long":
-		return VarTypeLong;
+		return VarTypeLong
 	case "string":
-		return VarTypeString;
+		return VarTypeString
+	case "bool":
+		return VarTypeBool
 	default:
 		return VarTypeUnresolved
 	}
 }
 
+func ResolveType(typ string) VariableType {
+	switch typ {
+	case "void":
+		return VarTypeVoid
+	default:
+		return ResolveVarType(typ)
+	}
+}
+
 func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	// See if this is a native method first. Likelihood is much greater.
-	nativeMethod := a.nativeMethods[n.name]
+	nativeMethod := a.runtime.FindFunction(n.name)
 	var localMethod *Method
 
 	if nativeMethod == nil {
@@ -275,7 +288,7 @@ func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	}
 
 	if nativeMethod != nil {
-		m.emit(instr(op_nativecall, nativeMethod.opcode, 0, 0))
+		m.emit(instr(op_nativecall, nativeMethod.InternalId, 0, 0))
 	} else {
 		m.emit(instr(op_call, localMethod.index, 0, 0))
 	}
@@ -430,14 +443,4 @@ func (m *Method) newLabel() *Instruction {
 	return &Instruction{
 		opcode: op_label,
 	}
-}
-
-func (a *Assembler) resolveNativeMethod(opcode int) *NativeMethod {
-	for _, v := range a.nativeMethods {
-		if v.opcode == opcode {
-			return v
-		}
-	}
-
-	return nil
 }

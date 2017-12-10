@@ -115,7 +115,9 @@ const (
 
 func LiteralToVarType(t LiteralType) VariableType {
 	if t == LiteralInteger {
+		return VarTypeInt
 	} else if t == LiteralLong {
+		return VarTypeLong
 	} else if t == LiteralString {
 		return VarTypeString
 	} else if t == LiteralBoolean {

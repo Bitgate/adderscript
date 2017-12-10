@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"strconv"
-	"math"
 )
 
 type Assembler struct {
@@ -16,15 +15,19 @@ type Assembler struct {
 }
 
 type ConstantPool struct {
-	ints    []int
-	longs   []int64
-	strings []string
+	values []*ConstantPoolEntry
+}
+
+type ConstantPoolEntry struct {
+	Type VariableType
+	Value interface{}
 }
 
 type Trigger struct {
-	name  string
-	label *Instruction
-	value uint64
+	name       string
+	definition *RuntimeListener
+	label      *Instruction
+	value      uint64
 }
 
 type Method struct {
@@ -33,6 +36,7 @@ type Method struct {
 	instructions []*Instruction
 	variables    []*LocalVariable
 	arguments    []*LocalVariable
+	entry        *Instruction
 
 	lvtIndex int
 	labelPtr int
@@ -136,9 +140,34 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 	}
 }
 
+func TypeOfNode(node ASTNode) VariableType {
+	switch t := node.(type) {
+	case *ASTLiteralExpr:
+		if t.literalType == LiteralInteger {
+			return VarTypeInt
+		} else if t.literalType == LiteralLong {
+			return VarTypeLong
+		} else if t.literalType == LiteralString {
+			return VarTypeString
+		} else if t.literalType == LiteralBoolean {
+			return VarTypeBool
+		}
+	}
+
+	panic(fmt.Sprintf("cannot resolve type of node: %T", node))
+}
+
 func (a *Assembler) assembleTrigger(n *ASTTrigger) {
 	var trigger Trigger
 	trigger.name = n.trigger
+
+	// Resolve the trigger uid
+	listener := a.runtime.FindListener(trigger.name)
+	if listener == nil {
+		panic(fmt.Errorf("unknown trigger %s, not defined in runtime", trigger.name))
+	}
+
+	trigger.definition = listener
 
 	// Verify that the filter value is a valid value.
 	// For now, values are longs only. This is subject to change.
@@ -159,6 +188,9 @@ func (a *Assembler) assembleTrigger(n *ASTTrigger) {
 
 	// Assemble the code belonging to this call
 	a.assembleNode(n.statement, method)
+
+	// Drop a return statement
+	method.emitOp(op_return)
 }
 
 func (a *Assembler) defineProc(n *ASTProc) {
@@ -185,6 +217,7 @@ func (a *Assembler) defineProc(n *ASTProc) {
 func (a *Assembler) assembleProc(n *ASTProc) {
 	m := a.resolveMethod(n.name)
 	a.assembleNode(n.body, m)
+	m.emitOp(op_return)
 }
 
 func (a *Assembler) assembleBlock(n *ASTBlockStatement, m *Method) {
@@ -226,12 +259,12 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 	var vartype = ResolveVarType(n.varType)
 
 	if vartype == VarTypeUnresolved {
-		panic("Unresolved variable type: " + n.varType)
+		panic("unresolved variable type: " + n.varType)
 	}
 
 	// See if this variable is already defined...
 	if m.resolveVariable(n.varName) != nil {
-		panic("Variable redeclared: " + n.varName)
+		panic("variable redeclared: " + n.varName)
 	}
 
 	local := m.defineVariable(n.varName, vartype)
@@ -269,8 +302,14 @@ func ResolveType(typ string) VariableType {
 }
 
 func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
+	// Form list of argument types
+	var types []VariableType
+	for _, v := range n.parameters {
+		types = append(types, TypeOfNode(v))
+	}
+
 	// See if this is a native method first. Likelihood is much greater.
-	nativeMethod := a.runtime.FindFunction(n.name)
+	nativeMethod := a.runtime.FindFunctionWithArguments(n.name, types...)
 	var localMethod *Method
 
 	if nativeMethod == nil {
@@ -278,7 +317,8 @@ func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 
 		// Still not found? Panic.
 		if localMethod == nil {
-			panic("Cannot resolve local or native method: " + n.name)
+			params := "(" + TypeListToString(", ", types...) + ")"
+			panic("Cannot resolve local or native method: " + n.name + params)
 		}
 	}
 
@@ -318,24 +358,16 @@ func (a *Assembler) assembleIdentifierExpr(n *ASTIdentifierExpr, m *Method) {
 
 func (a *Assembler) assembleLiteralExpr(n *ASTLiteralExpr, m *Method) {
 	if n.literalType == LiteralString {
-		v, _ := strconv.Unquote(n.value)
-		m.emit(instr(op_strpush, 0, 0, a.cpool.getString(v)))
-	} else if n.literalType == LiteralNumber {
-		v, e := strconv.ParseInt(n.value, 10, 64)
-		if e != nil {
-			panic("error parsing int value from string: " + n.value)
-		}
-
-		if v > math.MaxInt32 || v < math.MinInt32 {
-			m.emit(instr(op_lpush, 0, a.cpool.getLong(v), 0))
-		} else {
-			m.emit(instr(op_ipush, a.cpool.getInt(int(v)), 0, 0))
-		}
+		m.emit(instr(op_pushconst, a.cpool.getString(n.value.(string)), 0, 0))
+	} else if n.literalType == LiteralInteger {
+		m.emit(instr(op_pushconst, a.cpool.getInt(int(n.value.(int))), 0, 0))
+	} else if n.literalType == LiteralLong {
+		m.emit(instr(op_pushconst, a.cpool.getLong(n.value.(int64)), 0, 0))
 	} else if n.literalType == LiteralBoolean {
 		if n.value == "true" {
-			m.emit(instr(op_ipush, a.cpool.getInt(int(1)), 0, 0))
+			m.emit(instr(op_pushconst, a.cpool.getInt(int(1)), 0, 0))
 		} else {
-			m.emit(instr(op_ipush, a.cpool.getInt(int(0)), 0, 0))
+			m.emit(instr(op_pushconst, a.cpool.getInt(int(0)), 0, 0))
 		}
 	} else {
 		panic(fmt.Sprintf("unknown literal type %d (value %s)", n.literalType, n.value))
@@ -362,6 +394,11 @@ func (a *Assembler) defineMethod(name string) *Method {
 		instructions: make([]*Instruction, 512)[:0],
 		variables:    make([]*LocalVariable, 4)[:0],
 	}
+
+	// Define entry point, drop a label.
+	label := method.newLabel()
+	method.emit(label)
+	method.entry = label
 
 	a.methods = append(a.methods, method)
 	return method
@@ -401,36 +438,48 @@ func (m *Method) emitOp(op opcode) {
 }
 
 func (c *ConstantPool) getInt(i int) int {
-	for k, v := range c.ints {
-		if v == i {
+	for k, v := range c.values {
+		if v.Type == VarTypeInt && v.Value.(int) == i {
 			return k
 		}
 	}
 
-	c.ints = append(c.ints, i)
-	return len(c.ints) - 1
+	c.values = append(c.values, &ConstantPoolEntry{
+		Type:  VarTypeInt,
+		Value: i,
+	})
+
+	return len(c.values) - 1
 }
 
 func (c *ConstantPool) getLong(i int64) int {
-	for k, v := range c.longs {
-		if v == i {
+	for k, v := range c.values {
+		if v.Type == VarTypeLong && v.Value.(int64) == i {
 			return k
 		}
 	}
 
-	c.longs = append(c.longs, i)
-	return len(c.longs) - 1
+	c.values = append(c.values, &ConstantPoolEntry{
+		Type:  VarTypeLong,
+		Value: i,
+	})
+
+	return len(c.values) - 1
 }
 
 func (c *ConstantPool) getString(s string) int {
-	for k, v := range c.strings {
-		if v == s {
+	for k, v := range c.values {
+		if v.Type == VarTypeString && v.Value.(string) == s {
 			return k
 		}
 	}
 
-	c.strings = append(c.strings, s)
-	return len(c.strings) - 1
+	c.values = append(c.values, &ConstantPoolEntry{
+		Type:  VarTypeString,
+		Value: s,
+	})
+
+	return len(c.values) - 1
 }
 
 func instr(op opcode, i int, l int, s int) *Instruction {

@@ -142,6 +142,25 @@ func (r *AdderRuntime) FindFunction(name string) *RuntimeFunction {
 	return nil
 }
 
+func (r * AdderRuntime) FindFunctionWithArguments(name string, types ...VariableType) *RuntimeFunction {
+	functions: for _, v := range r.Functions {
+		// Match by name first, and length of arguments. Then verify individual argument types.
+		if v.Name == name && len(v.Parameters) == len(types) {
+			// Check all arguments..
+			for i, t := range v.Parameters {
+				if t.Type != types[i] {
+					continue functions // Try the next function, we're done with this one.
+				}
+			}
+
+			// Since all arguments matched, this is our type.
+			return v
+		}
+	}
+
+	return nil
+}
+
 func (r *AdderRuntime) FindFunctionById(uid int) *RuntimeFunction {
 	for _, v := range r.Functions {
 		if v.InternalId == uid {

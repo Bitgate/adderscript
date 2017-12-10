@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"text/tabwriter"
 	"os"
+	"strconv"
+	"strings"
 )
 
 func (a *Assembler) PrettyPrint() {
@@ -41,8 +43,19 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 	output := ""
 	op := ins.opcode
 
-	if op == op_ipush {
-		output = fmt.Sprintf("IPUSH %d\t", a.cpool.ints[ins.i])
+	if op == op_pushconst {
+		val := a.cpool.values[ins.i]
+		desc := "unknown cpool value"
+
+		if val.Type == VarTypeString {
+			desc = "string " + strconv.Quote(val.Value.(string))
+		} else if val.Type == VarTypeInt {
+			desc = "int " + strconv.Itoa(val.Value.(int))
+		} else if val.Type == VarTypeLong {
+			desc = "long " + strconv.FormatInt(val.Value.(int64), 10)
+		}
+
+		output = fmt.Sprintf("PUSHCONST %d\t; %s", ins.i, desc)
 	} else if op == op_nativecall {
 		output = fmt.Sprintf("NATIVECALL %s\t; id %d", a.runtime.FindFunctionById(ins.i).Name, ins.i)
 	} else if op == op_jmp {
@@ -58,6 +71,8 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 		}
 	} else if op == op_call {
 		output = fmt.Sprintf("CALL %d\t", ins.i)
+	} else if op == op_return {
+		output = fmt.Sprintf("RETURN\t")
 	}
 
 	// Labels are a corner-case: we need to print that with a custom format
@@ -71,4 +86,32 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 	} else {
 		tw.Write([]byte(fmt.Sprintf("\t%04d: %s\n", ins.address, output)))
 	}
+}
+
+func (t VariableType) String() string {
+	if t == VarTypeString {
+		return "string"
+	} else if t == VarTypeInt {
+		return "int"
+	} else if t == VarTypeLong {
+		return "long"
+	} else if t == VarTypeBool {
+		return "bool"
+	} else if t == VarTypeVoid {
+		return "void"
+	} else if t == VarTypeUnresolved {
+		return "unresolved"
+	} else { // We have an else case for those that are unhandled in this function, but do exist.
+		return "undefined"
+	}
+}
+
+func TypeListToString(sep string, types ...VariableType) string {
+	// Convert list to string representation first
+	asStrings := make([]string, len(types))
+	for i, v := range types {
+		asStrings[i] = v.String()
+	}
+
+	return strings.Join(asStrings, sep)
 }

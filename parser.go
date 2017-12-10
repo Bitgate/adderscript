@@ -4,6 +4,7 @@ import (
 	"strings"
 	"fmt"
 	"strconv"
+	"math"
 )
 
 var eofToken = token{tokenType: tokenEOF}
@@ -308,13 +309,23 @@ func (p *parser) parseTerminalExpression() ASTNode {
 	peek := p.peek(0)
 	switch peek.tokenType {
 	case tokenInteger:
-		return newLiteral(LiteralNumber, p.next().value)
-	case tokenString:
-		return newLiteral(LiteralString, p.next().value)
-	case tokenBool:
-		return newLiteral(LiteralBoolean, p.next().value)
-		//case tokenBoolean:
+		tok := p.next()
+		v, e := strconv.ParseInt(tok.value, 10, 64)
+		if e != nil {
+			panic("error parsing int value from string: " + tok.value)
+		}
 
+		if v > math.MaxInt32 || v < math.MinInt32 {
+			return newLiteral(LiteralLong, int64(v))
+		} else {
+			return newLiteral(LiteralInteger, int(v))
+		}
+	case tokenString:
+		v, _ := strconv.Unquote(p.next().value)
+		return newLiteral(LiteralString, v)
+	case tokenBool:
+		value := p.next().value == "true"
+		return newLiteral(LiteralBoolean, value)
 	case tokenIdentifier:
 		if p.peek(1).tokenType == tokenLParen {
 			return p.parseMethodExpr()

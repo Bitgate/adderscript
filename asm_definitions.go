@@ -3,10 +3,7 @@ package main
 type opcode int
 
 const (
-	op_ipush opcode = 0
-	op_lpush = 1
-	op_strpush = 2
-	op_bpush = 3
+	op_pushconst opcode = 0
 	op_add = 4
 	op_sub = 5
 	op_mul = 6
@@ -22,7 +19,6 @@ const (
 	op_call = 16
 	op_nativecall = 17
 	op_farcall = 18
-	op_const = 19
 	op_returnvalue = 20
 	op_getlvar = 21
 	op_setlvar = 22

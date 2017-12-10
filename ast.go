@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type ASTType int
 
@@ -103,18 +105,33 @@ func newStmt(expr ASTNode) *ASTExprStatement {
 type LiteralType int
 
 const (
-	LiteralNumber  LiteralType = iota
+	LiteralInteger  LiteralType = iota
+	LiteralLong  LiteralType = iota
 	LiteralString
 	LiteralBoolean
+
+	LiteralUnknown = -1
 )
+
+func LiteralToVarType(t LiteralType) VariableType {
+	if t == LiteralInteger {
+	} else if t == LiteralLong {
+	} else if t == LiteralString {
+		return VarTypeString
+	} else if t == LiteralBoolean {
+		return VarTypeBool
+	}
+
+	return LiteralUnknown
+}
 
 type ASTLiteralExpr struct {
 	ASTType
 	literalType LiteralType
-	value       string
+	value       interface{}
 }
 
-func newLiteral(t LiteralType, value string) *ASTLiteralExpr {
+func newLiteral(t LiteralType, value interface{}) *ASTLiteralExpr {
 	return &ASTLiteralExpr{
 		ASTType:     TypeLiteral,
 		literalType: t,

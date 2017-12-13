@@ -27,7 +27,7 @@ type Trigger struct {
 	name       string
 	definition *RuntimeListener
 	label      *Instruction
-	value      uint64
+	values      []interface{}
 }
 
 type Method struct {
@@ -181,7 +181,7 @@ func (a *Assembler) assembleTrigger(n *ASTTrigger) {
 
 	label := method.newLabel()
 	method.emit(label)
-	trigger.value = parsed
+	trigger.values = []interface{} {int64(parsed)} // TODO All value types here.
 	trigger.label = label
 
 	a.triggers = append(a.triggers, &trigger)

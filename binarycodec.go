@@ -21,8 +21,11 @@ func (a *Assembler) Encode() []byte {
 	binary.Write(writer, binary.BigEndian, uint16(len(a.triggers)))
 	for _, trigger := range a.triggers {
 		binary.Write(writer, binary.BigEndian, int32(trigger.definition.InternalId))
-		binary.Write(writer, binary.BigEndian, int64(trigger.value))
 		binary.Write(writer, binary.BigEndian, int32(trigger.label.address))
+
+		// Encode the trigger value
+		binary.Write(writer, binary.BigEndian, int8(len(trigger.values)))
+		binary.Write(writer, binary.BigEndian, int64(trigger.value))
 	}
 
 	// Encode methods..
@@ -67,6 +70,8 @@ func (a *Assembler) Encode() []byte {
 
 				if inst.opcode == op_pushconst || inst.opcode == op_nativecall {
 					binary.Write(writer, binary.BigEndian, int16(inst.i))
+				} else if inst.opcode == op_call {
+					binary.Write(writer, binary.BigEndian, int32(inst.i))
 				}
 			}
 		}

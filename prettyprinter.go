@@ -41,7 +41,7 @@ func (a *Assembler) PrettyPrint() {
 
 func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instruction) {
 	output := ""
-	op := ins.opcode
+	op := ins.Opcode
 
 	if op == op_pushconst {
 		val := a.cpool.values[ins.i]
@@ -57,13 +57,19 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 
 		output = fmt.Sprintf("PUSHCONST %d\t; %s", ins.i, desc)
 	} else if op == op_nativecall {
-		output = fmt.Sprintf("NATIVECALL %s\t; id %d", a.runtime.FindFunctionById(ins.i).Name, ins.i)
+		fn := a.runtime.FindFunctionById(ins.i)
+		args := make([]string, len(fn.Parameters))
+		for i := range args {
+			args[i] = fn.Parameters[i].Type.String() + " " + fn.Parameters[i].Name
+		}
+
+		output = fmt.Sprintf("NATIVECALL %s\t; id %d, %s(%s)", fn.Name, ins.i, fn.Name, strings.Join(args, ", "))
 	} else if op == op_jmp {
 		output = fmt.Sprintf("JMP %d\t", ins.i)
 	} else if op == op_jz {
 		output = fmt.Sprintf("JZ %d\t", ins.i)
-	} else if op == op_getivar {
-		output = fmt.Sprintf("GETIVAR %d\t", ins.i)
+	} else if op == op_getlocal {
+		output = fmt.Sprintf("GETLOCAL %d\t", ins.i)
 
 		// Document if they're parameters
 		if ins.i < len(m.arguments) {
@@ -73,6 +79,10 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 		output = fmt.Sprintf("CALL %d\t", ins.i)
 	} else if op == op_return {
 		output = fmt.Sprintf("RETURN\t")
+	} else if op == op_setlocal {
+		output = fmt.Sprintf("SETLOCAL %d\t", ins.i)
+	} else if op == op_eq {
+		output = fmt.Sprintf("EQ\t")
 	}
 
 	// Labels are a corner-case: we need to print that with a custom format
@@ -82,7 +92,7 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 	}
 
 	if output == "" {
-		tw.Write([]byte(fmt.Sprintf("\t%04d: OP_%d [%d %d %d]\t\n", ins.address, ins.opcode, ins.i, ins.l, ins.s)))
+		tw.Write([]byte(fmt.Sprintf("\t%04d: OP_%d [%d %d %d]\t\n", ins.address, ins.Opcode, ins.i, ins.l, ins.s)))
 	} else {
 		tw.Write([]byte(fmt.Sprintf("\t%04d: %s\n", ins.address, output)))
 	}

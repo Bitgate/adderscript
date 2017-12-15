@@ -7,7 +7,7 @@ import (
 type ASTType int
 
 const (
-	TypeTrigger     ASTType = iota
+	TypeTrigger        ASTType = iota
 	TypeMethodCall
 	TypeProc
 	TypeBlockStmt
@@ -16,7 +16,7 @@ const (
 	TypeLiteral
 	TypeIfStmt
 	TypeLogicalExpr
-	TypeIdentifierExpr // Can be either a var or a method ref
+	TypeIdentifierExpr  // Can be either a var or a method ref
 )
 
 type ASTNode interface {
@@ -51,6 +51,9 @@ type ASTMethodExpr struct {
 	ASTType
 	name       string
 	parameters []ASTNode
+
+	local  *Method
+	native *RuntimeFunction
 }
 
 func (m ASTMethodExpr) String() string {
@@ -105,8 +108,8 @@ func newStmt(expr ASTNode) *ASTExprStatement {
 type LiteralType int
 
 const (
-	LiteralInteger  LiteralType = iota
-	LiteralLong  LiteralType = iota
+	LiteralInteger LiteralType = iota
+	LiteralLong    LiteralType = iota
 	LiteralString
 	LiteralBoolean
 

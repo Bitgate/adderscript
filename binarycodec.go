@@ -6,9 +6,10 @@ import (
 	"bufio"
 	"encoding/binary"
 	"strconv"
+	"fmt"
 )
 
-const AbiVersion = 3
+const AbiVersion = 4
 
 func (a *Assembler) Encode() []byte {
 	buffer := new(bytes.Buffer)
@@ -25,7 +26,15 @@ func (a *Assembler) Encode() []byte {
 
 		// Encode the trigger value
 		binary.Write(writer, binary.BigEndian, int8(len(trigger.values)))
-		binary.Write(writer, binary.BigEndian, int64(trigger.value))
+		for _, v := range trigger.values {
+			switch t := v.(type) {
+			case int64:
+				binary.Write(writer, binary.BigEndian, int8(0))
+				binary.Write(writer, binary.BigEndian, t)
+			default:
+				panic(fmt.Errorf("cannot serialize type %T into a listener value", v))
+			}
+		}
 	}
 
 	// Encode methods..
@@ -36,7 +45,7 @@ func (a *Assembler) Encode() []byte {
 		binary.Write(writer, binary.BigEndian, int32(method.entry.address))
 
 		for _, inst := range method.instructions {
-			if inst.opcode != op_label {
+			if inst.Opcode != op_label {
 				numInstructions++
 			}
 		}
@@ -65,12 +74,12 @@ func (a *Assembler) Encode() []byte {
 	binary.Write(writer, binary.BigEndian, int32(numInstructions))
 	for _, method := range a.methods {
 		for _, inst := range method.instructions {
-			if inst.opcode != op_label {
-				binary.Write(writer, binary.BigEndian, int8(inst.opcode))
+			if inst.Opcode != op_label {
+				binary.Write(writer, binary.BigEndian, int8(inst.Opcode))
 
-				if inst.opcode == op_pushconst || inst.opcode == op_nativecall {
+				if inst.Opcode == op_pushconst || inst.Opcode == op_nativecall {
 					binary.Write(writer, binary.BigEndian, int16(inst.i))
-				} else if inst.opcode == op_call {
+				} else if inst.Opcode == op_call {
 					binary.Write(writer, binary.BigEndian, int32(inst.i))
 				}
 			}

@@ -42,14 +42,9 @@ type Method struct {
 	labelPtr int
 }
 
-type NativeMethod struct {
-	name   string
-	opcode int
-}
-
 type Instruction struct {
-	// opcode is the operation code of this instruction
-	opcode
+	// Opcode is the operation code of this instruction
+	Opcode
 
 	// i is the index of the int in the constant pool
 	i int
@@ -108,7 +103,7 @@ func (a *Assembler) AssembleProgram(rootNodes []ASTNode) {
 			}
 
 			// Labels do not alter the address. They're filtered out during encoding.
-			if instr.opcode != op_label {
+			if instr.Opcode != op_label {
 				address++
 			}
 		}
@@ -151,7 +146,18 @@ func TypeOfNode(node ASTNode) VariableType {
 			return VarTypeString
 		} else if t.literalType == LiteralBoolean {
 			return VarTypeBool
+		} else {
+			panic(fmt.Errorf("cannnot resolve type from LiteralExpr, unknown literal type %d", t.literalType))
 		}
+	case *ASTMethodExpr: {
+		if t.local != nil {
+			panic("local method return types not supported")
+		} else if t.native != nil {
+			return t.native.ReturnType
+		} else {
+			panic("no resolved local/native func")
+		}
+	}
 	}
 
 	panic(fmt.Sprintf("cannot resolve type of node: %T", node))
@@ -173,7 +179,7 @@ func (a *Assembler) assembleTrigger(n *ASTTrigger) {
 	// For now, values are longs only. This is subject to change.
 	parsed, err := strconv.ParseUint(n.value, 10, 64)
 	if err != nil {
-		panic(fmt.Sprintf("cannot parse trigger value into long: %s", n.value))
+		panic(fmt.Errorf("cannot parse trigger value into long: %s", n.value))
 	}
 
 	method := a.defineMethod("@" + n.trigger + "@" + n.value + "@" + strconv.Itoa(a.triggerIndex))
@@ -216,6 +222,13 @@ func (a *Assembler) defineProc(n *ASTProc) {
 
 func (a *Assembler) assembleProc(n *ASTProc) {
 	m := a.resolveMethod(n.name)
+
+	// Assemble the parameters (take values from stack and assign to locals)
+	for k, _ := range m.arguments {
+		v := m.arguments[len(m.arguments) - k - 1]
+		m.emit(instr(op_setlocal, v.index))
+	}
+
 	a.assembleNode(n.body, m)
 	m.emitOp(op_return)
 }
@@ -232,14 +245,14 @@ func (a *Assembler) assembleIfStmt(n *ASTIfStmt, m *Method) {
 	lblEnd := m.newLabel()
 
 	// JZ to lblFalse - absolute
-	jzToLblfalse := m.emit(instr(op_jz, 0, 0, 0)) // Jump if false (0) to the false block
+	jzToLblfalse := m.emit(instr(op_jz, 0)) // Jump if false (0) to the false block
 	lblFalse.labelFunc = func(address int) {
 		jzToLblfalse.i = address
 	}
 
 	// Encode true block (jz jumps over this if expression is false)
 	a.assembleNode(n.ifTrue, m)
-	jmpToLblend := m.emit(instr(op_jmp, 0, 0, 0))
+	jmpToLblend := m.emit(instr(op_jmp, 0))
 	lblEnd.labelFunc = func(address int) {
 		jmpToLblend.i = address
 	}
@@ -271,9 +284,18 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 
 	// If the local var has any expression defined, assemble it
 	if n.varValue != nil {
+		// Assemble the node first so it resolves the type
 		a.assembleNode(n.varValue, m)
-		// todo all types
-		m.emit(instr(op_setivar, local.index, 0, 0))
+
+		// Now verify that type against the variable type
+		exprType := TypeOfNode(n.varValue)
+
+		// Verify types
+		if exprType != vartype {
+			panic("assigning wrong type to '" + n.varType + " " + n.varName + "'") // TODO what type are we giving?
+		}
+
+		m.emit(instr(op_setlocal, local.index))
 	}
 }
 
@@ -323,14 +345,16 @@ func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	}
 
 	// Assemble method parameters
-	for _, v := range n.parameters {
-		a.assembleNode(v, m)
+	for i := range n.parameters {
+		a.assembleNode(n.parameters[len(n.parameters) - i - 1], m)
 	}
 
 	if nativeMethod != nil {
-		m.emit(instr(op_nativecall, nativeMethod.InternalId, 0, 0))
+		n.native = nativeMethod
+		m.emit(instr(op_nativecall, nativeMethod.InternalId))
 	} else {
-		m.emit(instr(op_call, localMethod.index, 0, 0))
+		n.local = localMethod
+		m.emit(instr(op_call, localMethod.index))
 	}
 }
 
@@ -353,21 +377,21 @@ func (a *Assembler) assembleIdentifierExpr(n *ASTIdentifierExpr, m *Method) {
 		panic("undefined variable: " + n.identifier)
 	}
 
-	m.emit(instr(op_getivar, local.index, 0, 0))
+	m.emit(instr(op_getlocal, local.index))
 }
 
 func (a *Assembler) assembleLiteralExpr(n *ASTLiteralExpr, m *Method) {
 	if n.literalType == LiteralString {
-		m.emit(instr(op_pushconst, a.cpool.getString(n.value.(string)), 0, 0))
+		m.emit(instr(op_pushconst, a.cpool.getString(n.value.(string))))
 	} else if n.literalType == LiteralInteger {
-		m.emit(instr(op_pushconst, a.cpool.getInt(int(n.value.(int))), 0, 0))
+		m.emit(instr(op_pushconst, a.cpool.getInt(int(n.value.(int)))))
 	} else if n.literalType == LiteralLong {
-		m.emit(instr(op_pushconst, a.cpool.getLong(n.value.(int64)), 0, 0))
+		m.emit(instr(op_pushconst, a.cpool.getLong(n.value.(int64))))
 	} else if n.literalType == LiteralBoolean {
 		if n.value == "true" {
-			m.emit(instr(op_pushconst, a.cpool.getInt(int(1)), 0, 0))
+			m.emit(instr(op_pushconst, a.cpool.getInt(int(1))))
 		} else {
-			m.emit(instr(op_pushconst, a.cpool.getInt(int(0)), 0, 0))
+			m.emit(instr(op_pushconst, a.cpool.getInt(int(0))))
 		}
 	} else {
 		panic(fmt.Sprintf("unknown literal type %d (value %s)", n.literalType, n.value))
@@ -432,8 +456,8 @@ func (m *Method) emit(instruction *Instruction) *Instruction {
 	return instruction
 }
 
-func (m *Method) emitOp(op opcode) {
-	instruction := instr(op, 0, 0, 0)
+func (m *Method) emitOp(op Opcode) {
+	instruction := instr(op, 0)
 	m.instructions = append(m.instructions, instruction)
 }
 
@@ -482,14 +506,14 @@ func (c *ConstantPool) getString(s string) int {
 	return len(c.values) - 1
 }
 
-func instr(op opcode, i int, l int, s int) *Instruction {
-	return &Instruction{opcode: op, i: i, l: l, s: s}
+func instr(op Opcode, i int) *Instruction {
+	return &Instruction{Opcode: op, i: i}
 }
 
 func (m *Method) newLabel() *Instruction {
 	m.labelPtr++
 
 	return &Instruction{
-		opcode: op_label,
+		Opcode: op_label,
 	}
 }

@@ -77,9 +77,10 @@ func (a *Assembler) Encode() []byte {
 			if inst.Opcode != op_label {
 				binary.Write(writer, binary.BigEndian, int8(inst.Opcode))
 
-				if inst.Opcode == op_pushconst || inst.Opcode == op_nativecall {
+				if inst.Opcode == op_pushconst || inst.Opcode == op_nativecall ||
+					inst.Opcode == op_setlocal || inst.Opcode == op_getlocal {
 					binary.Write(writer, binary.BigEndian, int16(inst.i))
-				} else if inst.Opcode == op_call {
+				} else if inst.Opcode == op_call || inst.Opcode == op_jz || inst.Opcode == op_jmp {
 					binary.Write(writer, binary.BigEndian, int32(inst.i))
 				}
 			}

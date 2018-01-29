@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"bufio"
 	"encoding/binary"
-	"strconv"
 	"fmt"
+	"io"
 )
 
 const AbiVersion = 4
@@ -27,10 +27,15 @@ func (a *Assembler) Encode() []byte {
 		// Encode the trigger value
 		binary.Write(writer, binary.BigEndian, int8(len(trigger.values)))
 		for _, v := range trigger.values {
-			switch t := v.(type) {
+			switch x := v.(type) {
+			case int:
+			case int32:
+			case uint32:
+				encodeAdderValue(writer, VarTypeInt, int32(x))
 			case int64:
-				binary.Write(writer, binary.BigEndian, int8(0))
-				binary.Write(writer, binary.BigEndian, t)
+				encodeAdderValue(writer, VarTypeLong, x)
+			case string:
+				encodeAdderValue(writer, VarTypeString, x)
 			default:
 				panic(fmt.Errorf("cannot serialize type %T into a listener value", v))
 			}
@@ -54,20 +59,7 @@ func (a *Assembler) Encode() []byte {
 	// Encode constant pool
 	binary.Write(writer, binary.BigEndian, int16(len(a.cpool.values)))
 	for _, v := range a.cpool.values {
-		binary.Write(writer, binary.BigEndian, uint8(v.Type))
-
-		if v.Type == VarTypeInt {
-			binary.Write(writer, binary.BigEndian, int32(v.Value.(int)))
-		} else if v.Type == VarTypeLong {
-			binary.Write(writer, binary.BigEndian, v.Value.(int64))
-		} else if v.Type == VarTypeString {
-			str := []byte(v.Value.(string))
-
-			binary.Write(writer, binary.BigEndian, uint16(len(str)))
-			binary.Write(writer, binary.BigEndian, str)
-		} else {
-			panic("cannot encode type " + strconv.Itoa(int(v.Type)))
-		}
+		encodeAdderValue(writer, v.Type, v.Value)
 	}
 
 	// Encode actual method code
@@ -89,6 +81,23 @@ func (a *Assembler) Encode() []byte {
 
 	writer.Flush()
 	return buffer.Bytes()
+}
+
+func encodeAdderValue(w io.Writer, typ VariableType, value interface{}) {
+	binary.Write(w, binary.BigEndian, uint8(typ))
+
+	if typ == VarTypeInt {
+		binary.Write(w, binary.BigEndian, int32(value.(int)))
+	} else if typ == VarTypeLong {
+		binary.Write(w, binary.BigEndian, value.(int64))
+	} else if typ == VarTypeString {
+		str := []byte(value.(string))
+
+		binary.Write(w, binary.BigEndian, uint16(len(str)))
+		binary.Write(w, binary.BigEndian, str)
+	} else {
+		panic("cannot encode type " + typ.String())
+	}
 }
 
 func (a *Assembler) EncodeToFile(file string) error {

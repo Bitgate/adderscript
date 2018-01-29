@@ -97,7 +97,45 @@ func ParseRuntime(runtimeData string) (*AdderRuntime, error) {
 		}
 	}
 
+	// Validate the runtime
+	if err := runtime.ValidateRuntime(); err != nil {
+		return nil, err
+	}
+
 	return &runtime, nil
+}
+
+// ValidateRuntime validates the runtime functions for completeness, and checks for any errors in the runtime data.
+func (rt AdderRuntime) ValidateRuntime() error {
+	// Verify whether each number is only used once, and whether we use no negative numbers
+	uniques := map[int]bool{}
+	for _, v := range rt.Functions {
+		if v.InternalId < 0 {
+			return fmt.Errorf("cannot validate runtime because function '%s' has negative internal ID %d", v.Name, v.InternalId)
+		}
+
+		if uniques[v.InternalId] {
+			return fmt.Errorf("cannot validate runtime because function '%s' has an already existing ID %d", v.Name, v.InternalId)
+		}
+
+		uniques[v.InternalId] = true
+	}
+
+	// Do the same for the listeners
+	uniques = map[int]bool{}
+	for _, v := range rt.Listeners {
+		if v.InternalId < 0 {
+			return fmt.Errorf("cannot validate runtime because listener '%s' has negative internal ID %d", v.Name, v.InternalId)
+		}
+
+		if uniques[v.InternalId] {
+			return fmt.Errorf("cannot validate runtime because listener '%s' has an already existing ID %d", v.Name, v.InternalId)
+		}
+
+		uniques[v.InternalId] = true
+	}
+
+	return nil
 }
 
 // parseParameters parses a single parameters string into an array of parameters.

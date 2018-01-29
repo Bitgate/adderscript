@@ -65,18 +65,19 @@ type Instruction struct {
 type LocalVariable struct {
 	index int
 	name  string
+	typ VariableType
 }
 
 type VariableType int
 
 const (
-	VarTypeInt    VariableType = iota
-	VarTypeLong
-	VarTypeString
-	VarTypeBool
-	VarTypeVoid    // Not a variable type, but defined to be used with method types
+	VarTypeInt VariableType = 0
+	VarTypeLong = 1
+	VarTypeString = 2
+	VarTypeBool = 3
+	VarTypeVoid = 4    // Not a variable type, but defined to be used with method types
 
-	VarTypeUnresolved VariableType = -1
+	VarTypeUnresolved = -1
 )
 
 func (a *Assembler) AssembleProgram(rootNodes []ASTNode) {
@@ -135,7 +136,7 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 	}
 }
 
-func TypeOfNode(node ASTNode) VariableType {
+func (m *Method) TypeOfNode(node ASTNode) VariableType {
 	switch t := node.(type) {
 	case *ASTLiteralExpr:
 		if t.literalType == LiteralInteger {
@@ -147,7 +148,7 @@ func TypeOfNode(node ASTNode) VariableType {
 		} else if t.literalType == LiteralBoolean {
 			return VarTypeBool
 		} else {
-			panic(fmt.Errorf("cannnot resolve type from LiteralExpr, unknown literal type %d", t.literalType))
+			panic(fmt.Errorf("cannot resolve type from LiteralExpr, unknown literal type %d", t.literalType))
 		}
 	case *ASTMethodExpr: {
 		if t.local != nil {
@@ -157,6 +158,14 @@ func TypeOfNode(node ASTNode) VariableType {
 		} else {
 			panic("no resolved local/native func")
 		}
+	}
+	case *ASTIdentifierExpr: {
+		// TODO do this a bit nicer
+		resolved := m.resolveVariable(t.identifier)
+		if resolved == nil {
+			panic("cannot resolve variable " + t.identifier)
+		}
+		return resolved.typ
 	}
 	}
 
@@ -288,11 +297,11 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 		a.assembleNode(n.varValue, m)
 
 		// Now verify that type against the variable type
-		exprType := TypeOfNode(n.varValue)
+		exprType := m.TypeOfNode(n.varValue)
 
 		// Verify types
 		if exprType != vartype {
-			panic("assigning wrong type to '" + n.varType + " " + n.varName + "'") // TODO what type are we giving?
+			panic("cannot assign value of type '" + exprType.String() + "' to '" + n.varType + " " + n.varName + "'")
 		}
 
 		m.emit(instr(op_setlocal, local.index))
@@ -327,7 +336,7 @@ func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	// Form list of argument types
 	var types []VariableType
 	for _, v := range n.parameters {
-		types = append(types, TypeOfNode(v))
+		types = append(types, m.TypeOfNode(v))
 	}
 
 	// See if this is a native method first. Likelihood is much greater.
@@ -445,6 +454,7 @@ func (a *Method) defineVariable(name string, t VariableType) *LocalVariable {
 	local := &LocalVariable{
 		name:  name,
 		index: index,
+		typ: t,
 	}
 
 	a.variables = append(a.variables, local)

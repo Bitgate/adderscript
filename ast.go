@@ -127,7 +127,7 @@ func LiteralToVarType(t LiteralType) VariableType {
 		return VarTypeBool
 	}
 
-	return LiteralUnknown
+	return VarTypeUnresolved
 }
 
 type ASTLiteralExpr struct {

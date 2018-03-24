@@ -84,7 +84,8 @@ func (a *Assembler) Encode() []byte {
 }
 
 func encodeAdderValue(w io.Writer, typ VariableType, value interface{}) {
-	binary.Write(w, binary.BigEndian, uint8(typ))
+	println("Notice: finish encoding")
+	binary.Write(w, binary.BigEndian, 0) // uint8(typ)
 
 	if typ == VarTypeInt {
 		binary.Write(w, binary.BigEndian, int32(value.(int)))

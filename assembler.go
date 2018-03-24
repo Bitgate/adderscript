@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 type Assembler struct {
@@ -68,16 +69,20 @@ type LocalVariable struct {
 	typ VariableType
 }
 
-type VariableType int
+type VariableType struct {
+	builtin bool
+	keyword string
+	native string
+}
 
-const (
-	VarTypeInt VariableType = 0
-	VarTypeLong = 1
-	VarTypeString = 2
-	VarTypeBool = 3
-	VarTypeVoid = 4    // Not a variable type, but defined to be used with method types
+var (
+	VarTypeInt = VariableType{builtin: true, keyword: "int"}
+	VarTypeLong = VariableType{builtin: true, keyword: "long"}
+	VarTypeString = VariableType{builtin: true, keyword: "string"}
+	VarTypeBool = VariableType{builtin: true, keyword: "bool"}
+	VarTypeVoid = VariableType{builtin: true, keyword: "void"}    // Not a variable type, but defined to be used with method types
 
-	VarTypeUnresolved = -1
+	VarTypeUnresolved = VariableType{builtin: true, keyword: "MISSING_TYPE"}
 )
 
 func (a *Assembler) AssembleProgram(rootNodes []ASTNode) {
@@ -156,7 +161,7 @@ func (m *Method) TypeOfNode(node ASTNode) VariableType {
 		} else if t.native != nil {
 			return t.native.ReturnType
 		} else {
-			panic("no resolved local/native func")
+			panic("no resolved local/native func: " + t.name)
 		}
 	}
 	case *ASTIdentifierExpr: {
@@ -233,8 +238,7 @@ func (a *Assembler) assembleProc(n *ASTProc) {
 	m := a.resolveMethod(n.name)
 
 	// Assemble the parameters (take values from stack and assign to locals)
-	for k, _ := range m.arguments {
-		v := m.arguments[len(m.arguments) - k - 1]
+	for _, v := range m.arguments {
 		m.emit(instr(op_setlocal, v.index))
 	}
 
@@ -319,6 +323,10 @@ func ResolveVarType(varType string) VariableType {
 	case "bool":
 		return VarTypeBool
 	default:
+		if strings.HasPrefix(varType, "native<") && strings.HasSuffix(varType, ">") {
+			contents := strings.Replace(strings.Replace(varType, ">", "", -1), "native<", "", -1)
+			return VariableType{builtin: false, keyword:"native", native:contents}
+		}
 		return VarTypeUnresolved
 	}
 }

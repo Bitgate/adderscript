@@ -30,8 +30,8 @@ type FunctionParameter struct {
 	Name string
 }
 
-var AnyType = "void|int|string|bool"
-var RuntimeLinePattern, _ = regexp.Compile("^\\s*(" + AnyType + "|listener)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\((.*)\\)\\s*->\\s*(\\d+)\\s*;$")
+var AnyType = "void|int|string|bool|native<.*>"
+var RuntimeLinePattern, _ = regexp.Compile("^\\s*(" + AnyType + "|listener)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\(([^)]*)\\)\\s*(\\((.*)\\))?\\s*->\\s*(\\d+)\\s*;$")
 var ParametersPattern, _ = regexp.Compile("\\s*(" + AnyType + ")\\s+([a-zA-Z_0-9]+)")
 
 func ParseRuntime(runtimeData string) (*AdderRuntime, error) {
@@ -47,13 +47,14 @@ func ParseRuntime(runtimeData string) (*AdderRuntime, error) {
 		}
 
 		matches := RuntimeLinePattern.FindAllStringSubmatch(line, -1)
-		if len(matches) == 1 && len(matches[0]) >= 5 {
+		if len(matches) == 1 && len(matches[0]) >= 6 {
 			groups := matches[0][1:]
 
 			returnType := groups[0]
 			methodName := groups[1]
 			parameters := groups[2]
-			uid := groups[3]
+			incomingParameters := groups[4]
+			uid := groups[5]
 
 			uidInt, err := strconv.Atoi(uid)
 			if err != nil {
@@ -67,6 +68,15 @@ func ParseRuntime(runtimeData string) (*AdderRuntime, error) {
 			}
 
 			if returnType == "listener" {
+				// Parse listener parameters if any
+				if len(incomingParameters) > 1 {
+					incoming, err := parseParameters(incomingParameters)
+					if err != nil {
+						return nil, fmt.Errorf("cannot parse listener receiving parameters (%s): %s", incomingParameters, err)
+					}
+					fmt.Printf("%+v\n", incoming)
+				}
+
 				// Put the new listener into the list of listeners.
 				listener := &RuntimeListener{
 					Name:       methodName,
@@ -163,7 +173,7 @@ func parseParameters(parameters string) ([]FunctionParameter, error) {
 			param := FunctionParameter{Name: paramName, Type: resolvedType}
 			result = append(result, param)
 		} else {
-			return nil, fmt.Errorf("could not parse parameter %d", parameterNumber+1)
+			return nil, fmt.Errorf("could not parse parameter %d (%s)", parameterNumber+1, param)
 		}
 	}
 

@@ -1,9 +1,5 @@
 package main
 
-import (
-	"fmt"
-)
-
 type tokenType int
 type char uint8
 
@@ -14,26 +10,26 @@ const (
 	tokenComment         // Simple single or multi-line comment
 	tokenIdentifier      // Any identifier that is not a keyword
 	tokenOn              // The keyword 'on', indicating a trigger
-	tokenProc            // The 'proc' keyword indicating a new method
+	tokenFunc            // The 'func' keyword indicating a new method
 	tokenIf
 	tokenElse
-	tokenLParen          // Left parenthesis '('
-	tokenRParen          // Right parenthesis ')'
-	tokenInteger         // An integer literal
-	tokenSemicolon       // A semicolon ';'
+	tokenLParen                   // Left parenthesis '('
+	tokenRParen                   // Right parenthesis ')'
+	tokenInteger                 // An integer literal
+	tokenSemicolon             // A semicolon ';'
 	tokenLBrack
 	tokenRBrack
 	tokenAssign
-	tokenString          // A string literal
+	tokenString                   // A string literal
 	tokenBool
 	tokenComma
 	tokenMinus
-	tokenEqual           // ==
-	tokenNotEqual        // !=
-	tokenLessThan        // <
-	tokenGreaterThan     // >
-	tokenLessOrEqual     // <=
-	tokenGreaterOrEqual  // >=
+	tokenEqual                     // ==
+	tokenNotEqual               // !=
+	tokenLessThan               // <
+	tokenGreaterThan         // >
+	tokenLessOrEqual         // <=
+	tokenGreaterOrEqual   // >=
 	tokenNot             // !
 	tokenPlus
 	tokenDivide
@@ -239,8 +235,7 @@ func scanAny(s *scanner) scanAction {
 
 	if isStartOfIdentifier(c) {
 		return scanIdentifier
-	}
-	if isIntegerChar(c) {
+	} else if isIntegerChar(c) {
 		return scanIntegerLiteral
 	}
 
@@ -250,7 +245,7 @@ func scanAny(s *scanner) scanAction {
 		fragmentEnd = len(s.data)
 	}
 
-	fmt.Println("\nUnknown char: " + string(c) + "\nData:\n" + s.data[s.pos:fragmentEnd])
+	panic("unknown char: " + string(c) + "; data: " + s.data[s.pos:fragmentEnd])
 	return nil
 }
 
@@ -323,8 +318,8 @@ func scanIdentifier(s *scanner) scanAction {
 	value := s.value()
 	if value == "on" {
 		s.makeToken(tokenOn)
-	} else if value == "proc" {
-		s.makeToken(tokenProc)
+	} else if value == "func" {
+		s.makeToken(tokenFunc)
 	} else if value == "if" {
 		s.makeToken(tokenIf)
 	} else if value == "else" {

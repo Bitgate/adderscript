@@ -9,7 +9,7 @@ type ASTType int
 const (
 	TypeTrigger        ASTType = iota
 	TypeMethodCall
-	TypeProc
+	TypeFunc
 	TypeBlockStmt
 	TypeVarDecl
 	TypeExprStmt
@@ -72,25 +72,25 @@ func newMethodExpr(name string, parameters ...ASTNode) *ASTMethodExpr {
 	}
 }
 
-type ASTProc struct {
+type ASTFunc struct {
 	ASTType
 	name      string
-	arguments []ProcArgument
+	arguments []FuncArgument
 	body      ASTNode
 }
 
-type ProcArgument struct {
+type FuncArgument struct {
 	name    string
 	argtype string
 }
 
-func (p ASTProc) String() string {
-	return fmt.Sprintf("ASTProc{name=%s, args=%+v}", p.name, p.arguments)
+func (p ASTFunc) String() string {
+	return fmt.Sprintf("ASTFunc{name=%s, args=%+v}", p.name, p.arguments)
 }
 
-func newProc(name string, body ASTNode, arguments ...ProcArgument) *ASTProc {
-	return &ASTProc{
-		ASTType:   TypeProc,
+func newFunc(name string, body ASTNode, arguments ...FuncArgument) *ASTFunc {
+	return &ASTFunc{
+		ASTType:   TypeFunc,
 		name:      name,
 		body:      body,
 		arguments: arguments,

@@ -59,10 +59,10 @@ var (
 func ProcessAndAnalyzeProgram(runtime *AdderRuntime, rootNodes []ASTNode) AnalyzedProgram {
 	program := AnalyzedProgram{runtime: runtime, Nodes: rootNodes}
 
-	// Hoist proc declarations
+	// Hoist function declarations
 	for _, v := range rootNodes {
-		if v.Type() == TypeProc {
-			program.defineProc(v.(*ASTProc))
+		if v.Type() == TypeFunc {
+			program.defineFunc(v.(*ASTFunc))
 		}
 	}
 
@@ -77,8 +77,8 @@ func (p *AnalyzedProgram) analyzeNode(node ASTNode, method *Method) {
 	switch n := node.(type) {
 	case *ASTTrigger:
 		p.analyzeTrigger(n)
-	case *ASTProc:
-		p.analyzeProc(n)
+	case *ASTFunc:
+		p.analyzeFunc(n)
 	case *ASTBlockStatement:
 		p.analyzeBlock(n, method)
 	case *ASTVarDeclaration:
@@ -130,7 +130,7 @@ func (a *AnalyzedProgram) analyzeTrigger(n *ASTTrigger) {
 	a.analyzeNode(n.statement, n.method)
 }
 
-func (a *AnalyzedProgram) analyzeProc(n *ASTProc) {
+func (a *AnalyzedProgram) analyzeFunc(n *ASTFunc) {
 	m := a.resolveMethod(n.name)
 	a.analyzeNode(n.body, m)
 }
@@ -295,10 +295,10 @@ func (a *Method) defineVariable(name string, t VariableType) *LocalVariable {
 	return local
 }
 
-func (p *AnalyzedProgram) defineProc(n *ASTProc) {
+func (p *AnalyzedProgram) defineFunc(n *ASTFunc) {
 	method := p.resolveMethod(n.name)
 	if method != nil {
-		panic(fmt.Sprintf("redefining method: %s", n.name))
+		panic(fmt.Sprintf("redefining function: %s", n.name))
 	}
 
 	method = p.defineMethod(n.name)

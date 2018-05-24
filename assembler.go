@@ -52,8 +52,8 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 	switch n := node.(type) {
 	case *ASTTrigger:
 		a.assembleTrigger(n)
-	case *ASTProc:
-		a.assembleProc(n)
+	case *ASTFunc:
+		a.assembleFunc(n)
 	case *ASTBlockStatement:
 		a.assembleBlock(n, method)
 	case *ASTVarDeclaration:
@@ -83,7 +83,7 @@ func (a *Assembler) assembleTrigger(n *ASTTrigger) {
 	n.method.emitOp(op_return)
 }
 
-func (a *Assembler) assembleProc(n *ASTProc) {
+func (a *Assembler) assembleFunc(n *ASTFunc) {
 	m := a.program.resolveMethod(n.name)
 
 	// Assemble the parameters (take values from stack and assign to locals)

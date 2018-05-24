@@ -96,11 +96,11 @@ func (p *parser) parseTopLevelDecl() ASTNode {
 	if t.tokenType == tokenOn {
 		p.rewind()
 		return p.parseTrigger()
-	} else if t.tokenType == tokenProc {
+	} else if t.tokenType == tokenFunc {
 		p.rewind()
-		return p.parseProc()
+		return p.parseFunc()
 	} else {
-		p.unexpected(t, "on", "proc")
+		p.unexpected(t, "on", "func")
 	}
 
 	return nil
@@ -116,13 +116,13 @@ func (p *parser) parseTrigger() ASTNode {
 	return newTrigger(identifier.value, value.value, stmt)
 }
 
-func (p *parser) parseProc() ASTNode {
-	p.expectConsume(tokenProc, "proc")
-	name := p.expectConsume(tokenIdentifier, "proc name")
+func (p *parser) parseFunc() ASTNode {
+	p.expectConsume(tokenFunc, "func")
+	name := p.expectConsume(tokenIdentifier, "function name")
 	p.expectConsume(tokenLParen, "'('")
 
 	// Parse argument list..
-	arguments := []ProcArgument{}
+	arguments := []FuncArgument{}
 	needsComma := false
 	for {
 		peek := p.peek(0)
@@ -139,14 +139,14 @@ func (p *parser) parseProc() ASTNode {
 			argType := p.expectConsume(tokenIdentifier, "argument type")
 			argName := p.expectConsume(tokenIdentifier, "argument name")
 
-			arguments = append(arguments, ProcArgument{argName.value, argType.value})
+			arguments = append(arguments, FuncArgument{argName.value, argType.value})
 			needsComma = true
 		}
 	}
 
 	p.expectConsume(tokenRParen, "')")
 	body := p.parseStatement()
-	return newProc(name.value, body, arguments...)
+	return newFunc(name.value, body, arguments...)
 }
 
 func (p *parser) parseStatement() ASTNode {

@@ -43,8 +43,10 @@ func compileRecursive(runtime *AdderRuntime, base string, dir string) {
 				tokens := ScanText(text)
 
 				ast := Parse(text, tokens)
-				assembler := Assembler{runtime: runtime}
-				assembler.AssembleProgram(ast)
+				program := ProcessAndAnalyzeProgram(runtime, ast)
+
+				assembler := Assembler{program: program}
+				assembler.AssembleProgram()
 				assembler.PrettyPrint()
 
 				os.MkdirAll(base + "/bin/" + dir, os.ModePerm)

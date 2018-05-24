@@ -15,7 +15,7 @@ func (a *Assembler) PrettyPrint() {
 	fmt.Println("")
 
 	fmt.Println("Defined methods:")
-	for i, v := range a.methods {
+	for i, v := range a.program.methods {
 		fmt.Printf("\t%d: %s (%d instructions)\n", i, v.name, len(v.instructions))
 
 		for ii, vv := range v.variables {
@@ -27,7 +27,7 @@ func (a *Assembler) PrettyPrint() {
 
 	fmt.Println("Method code:")
 	tw := tabwriter.NewWriter(os.Stdout, 8, 4, 2, '\t', 0)
-	for i, v := range a.methods {
+	for i, v := range a.program.methods {
 		fmt.Printf("\t%s (id %d with %d instructions)\n", v.name, i, len(v.instructions))
 
 		for _, instr := range v.instructions {
@@ -44,7 +44,7 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 	op := ins.Opcode
 
 	if op == op_pushconst {
-		val := a.cpool.values[ins.i]
+		val := a.cpool.values[ins.cpoolIndex]
 		desc := "unknown cpool value"
 
 		if val.Type == VarTypeString {
@@ -55,32 +55,32 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 			desc = "long " + strconv.FormatInt(val.Value.(int64), 10)
 		}
 
-		output = fmt.Sprintf("PUSHCONST %d\t; %s", ins.i, desc)
+		output = fmt.Sprintf("PUSHCONST %d\t; %s", ins.cpoolIndex, desc)
 	} else if op == op_nativecall {
-		fn := a.runtime.FindFunctionById(ins.i)
+		fn := a.program.runtime.FindFunctionById(ins.cpoolIndex)
 		args := make([]string, len(fn.Parameters))
 		for i := range args {
 			args[i] = fn.Parameters[i].Type.String() + " " + fn.Parameters[i].Name
 		}
 
-		output = fmt.Sprintf("NATIVECALL %s\t; id %d, %s(%s)", fn.Name, ins.i, fn.Name, strings.Join(args, ", "))
+		output = fmt.Sprintf("NATIVECALL %s\t; id %d, %s(%s)", fn.Name, ins.cpoolIndex, fn.Name, strings.Join(args, ", "))
 	} else if op == op_jmp {
-		output = fmt.Sprintf("JMP %d\t", ins.i)
+		output = fmt.Sprintf("JMP %d\t", ins.cpoolIndex)
 	} else if op == op_jz {
-		output = fmt.Sprintf("JZ %d\t", ins.i)
+		output = fmt.Sprintf("JZ %d\t", ins.cpoolIndex)
 	} else if op == op_getlocal {
-		output = fmt.Sprintf("GETLOCAL %d\t", ins.i)
+		output = fmt.Sprintf("GETLOCAL %d\t", ins.cpoolIndex)
 
 		// Document if they're parameters
-		if ins.i < len(m.arguments) {
-			output += "; parameter " + m.arguments[ins.i].name
+		if ins.cpoolIndex < len(m.arguments) {
+			output += "; parameter " + m.arguments[ins.cpoolIndex].name
 		}
 	} else if op == op_call {
-		output = fmt.Sprintf("CALL %d\t", ins.i)
+		output = fmt.Sprintf("CALL %d\t", ins.cpoolIndex)
 	} else if op == op_return {
 		output = fmt.Sprintf("RETURN\t")
 	} else if op == op_setlocal {
-		output = fmt.Sprintf("SETLOCAL %d\t", ins.i)
+		output = fmt.Sprintf("SETLOCAL %d\t", ins.cpoolIndex)
 	} else if op == op_eq {
 		output = fmt.Sprintf("EQ\t")
 	}
@@ -92,7 +92,7 @@ func printInstruction(tw *tabwriter.Writer, a *Assembler, m *Method, ins *Instru
 	}
 
 	if output == "" {
-		tw.Write([]byte(fmt.Sprintf("\t%04d: OP_%d [%d %d %d]\t\n", ins.address, ins.Opcode, ins.i, ins.l, ins.s)))
+		tw.Write([]byte(fmt.Sprintf("\t%04d: OP_%d [%d]\t\n", ins.address, ins.Opcode, ins.cpoolIndex)))
 	} else {
 		tw.Write([]byte(fmt.Sprintf("\t%04d: %s\n", ins.address, output)))
 	}

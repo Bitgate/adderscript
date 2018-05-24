@@ -19,8 +19,8 @@ func (a *Assembler) Encode() []byte {
 
 	// Encode triggers/event listeners
 	// TODO make triggers listeners on strings too. And support wildcards.
-	binary.Write(writer, binary.BigEndian, uint16(len(a.triggers)))
-	for _, trigger := range a.triggers {
+	binary.Write(writer, binary.BigEndian, uint16(len(a.program.triggers)))
+	for _, trigger := range a.program.triggers {
 		binary.Write(writer, binary.BigEndian, int32(trigger.definition.InternalId))
 		binary.Write(writer, binary.BigEndian, int32(trigger.label.address))
 
@@ -44,8 +44,8 @@ func (a *Assembler) Encode() []byte {
 
 	// Encode methods..
 	numInstructions := 0
-	binary.Write(writer, binary.BigEndian, uint16(len(a.methods)))
-	for _, method := range a.methods {
+	binary.Write(writer, binary.BigEndian, uint16(len(a.program.methods)))
+	for _, method := range a.program.methods {
 		binary.Write(writer, binary.BigEndian, int16(method.index))
 		binary.Write(writer, binary.BigEndian, int32(method.entry.address))
 
@@ -64,16 +64,16 @@ func (a *Assembler) Encode() []byte {
 
 	// Encode actual method code
 	binary.Write(writer, binary.BigEndian, int32(numInstructions))
-	for _, method := range a.methods {
+	for _, method := range a.program.methods {
 		for _, inst := range method.instructions {
 			if inst.Opcode != op_label {
 				binary.Write(writer, binary.BigEndian, int8(inst.Opcode))
 
 				if inst.Opcode == op_pushconst || inst.Opcode == op_nativecall ||
 					inst.Opcode == op_setlocal || inst.Opcode == op_getlocal {
-					binary.Write(writer, binary.BigEndian, int16(inst.i))
+					binary.Write(writer, binary.BigEndian, int16(inst.cpoolIndex))
 				} else if inst.Opcode == op_call || inst.Opcode == op_jz || inst.Opcode == op_jmp {
-					binary.Write(writer, binary.BigEndian, int32(inst.i))
+					binary.Write(writer, binary.BigEndian, int32(inst.cpoolIndex))
 				}
 			}
 		}
@@ -84,16 +84,16 @@ func (a *Assembler) Encode() []byte {
 }
 
 func encodeAdderValue(w io.Writer, typ VariableType, value interface{}) {
-	println("Notice: finish encoding")
-	binary.Write(w, binary.BigEndian, 0) // uint8(typ)
-
 	if typ == VarTypeInt {
+		binary.Write(w, binary.BigEndian, int8(0))
 		binary.Write(w, binary.BigEndian, int32(value.(int)))
 	} else if typ == VarTypeLong {
+		binary.Write(w, binary.BigEndian, int8(1))
 		binary.Write(w, binary.BigEndian, value.(int64))
 	} else if typ == VarTypeString {
 		str := []byte(value.(string))
 
+		binary.Write(w, binary.BigEndian, int8(2))
 		binary.Write(w, binary.BigEndian, uint16(len(str)))
 		binary.Write(w, binary.BigEndian, str)
 	} else {

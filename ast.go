@@ -32,6 +32,9 @@ type ASTTrigger struct {
 	trigger   string
 	value     string
 	statement ASTNode
+
+	entry *Trigger
+	method *Method
 }
 
 func (t ASTTrigger) String() string {
@@ -161,6 +164,8 @@ type ASTVarDeclaration struct {
 	varType  string
 	varName  string
 	varValue ASTNode // Optional. If non-nil, becomes an assign instruction too.
+
+	variable *LocalVariable
 }
 
 func newAssignment(varType, varName string, varValue ASTNode) *ASTVarDeclaration {
@@ -207,6 +212,8 @@ func newLogicalExpr(left ASTNode, comparator tokenType, right ASTNode) *ASTLogic
 type ASTIdentifierExpr struct {
 	ASTType
 	identifier string
+
+	resolved *LocalVariable
 }
 
 func newIdentifier(identifier string) *ASTIdentifierExpr {

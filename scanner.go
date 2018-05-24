@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type tokenType int
 type char uint8
@@ -33,6 +35,10 @@ const (
 	tokenLessOrEqual     // <=
 	tokenGreaterOrEqual  // >=
 	tokenNot             // !
+	tokenPlus
+	tokenDivide
+	tokenMultiply
+	tokenModulo
 )
 
 type scanAction func(*scanner) scanAction
@@ -109,11 +115,15 @@ func scanAny(s *scanner) scanAction {
 	}
 
 	for {
-		if c == 0 || c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+		if c == 0 || c == eof {
+			s.makeToken(tokenEOF)
+			return nil
+		} else if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
 			s.next()
 			c = s.current()
 			continue
 		}
+
 		break
 	}
 
@@ -126,6 +136,12 @@ func scanAny(s *scanner) scanAction {
 		if c == '/' {
 			s.next() // consume '/'
 			return scanSingleComment
+		} else if c == '*' {
+			s.next()
+			return scanMultilineComment
+		} else {
+			s.makeToken(tokenDivide)
+			return scanAny
 		}
 	} else if c == '"' {
 		return scanString
@@ -207,6 +223,18 @@ func scanAny(s *scanner) scanAction {
 			s.makeToken(tokenMinus)
 			return scanAny
 		}
+	} else if c == '+' {
+		s.next()
+		s.makeToken(tokenPlus)
+		return scanAny
+	} else if c == '*' {
+		s.next()
+		s.makeToken(tokenMultiply)
+		return scanAny
+	} else if c == '%' {
+		s.next()
+		s.makeToken(tokenModulo)
+		return scanAny
 	}
 
 	if isStartOfIdentifier(c) {
@@ -217,14 +245,37 @@ func scanAny(s *scanner) scanAction {
 	}
 
 	s.rewind(1)
-	fmt.Println("\nUnknown char: " + string(c) + "\nData:\n" + s.data[s.pos:s.pos+10])
+	fragmentEnd := s.pos + 10
+	if fragmentEnd > len(s.data) {
+		fragmentEnd = len(s.data)
+	}
+
+	fmt.Println("\nUnknown char: " + string(c) + "\nData:\n" + s.data[s.pos:fragmentEnd])
 	return nil
 }
 
 func scanSingleComment(s *scanner) scanAction {
 	for {
 		c := s.next()
+
 		if c == '\n' || c == eof {
+			s.rewind(1)
+			break
+		}
+	}
+
+	s.makeToken(tokenComment)
+	return scanAny
+}
+
+func scanMultilineComment(s *scanner) scanAction {
+	for {
+		c := s.next()
+
+		if c == '*' && s.peek(0) == '/' {
+			s.next(); s.next() // consume both * and /
+			break
+		} else if c == eof {
 			s.rewind(1)
 			break
 		}

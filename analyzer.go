@@ -7,7 +7,7 @@ import (
 )
 
 type AnalyzedProgram struct {
-	Nodes []ASTNode
+	Nodes        []ASTNode
 	methods      []*Method
 	triggers     []*Trigger
 	runtime      *AdderRuntime
@@ -19,7 +19,7 @@ type Trigger struct {
 	name       string
 	definition *RuntimeListener
 	label      *Instruction
-	values      []interface{}
+	values     []interface{}
 }
 
 type Method struct {
@@ -37,21 +37,21 @@ type Method struct {
 type LocalVariable struct {
 	index int
 	name  string
-	typ VariableType
+	typ   VariableType
 }
 
 type VariableType struct {
 	builtin bool
 	keyword string
-	native string
+	native  string
 }
 
 var (
-	VarTypeInt = VariableType{builtin: true, keyword: "int"}
-	VarTypeLong = VariableType{builtin: true, keyword: "long"}
+	VarTypeInt    = VariableType{builtin: true, keyword: "int"}
+	VarTypeLong   = VariableType{builtin: true, keyword: "long"}
 	VarTypeString = VariableType{builtin: true, keyword: "string"}
-	VarTypeBool = VariableType{builtin: true, keyword: "bool"}
-	VarTypeVoid = VariableType{builtin: true, keyword: "void"}    // Not a variable type, but defined to be used with method types
+	VarTypeBool   = VariableType{builtin: true, keyword: "bool"}
+	VarTypeVoid   = VariableType{builtin: true, keyword: "void"} // Not a variable type, but defined to be used with method types
 
 	VarTypeUnresolved = VariableType{builtin: true, keyword: "MISSING_TYPE"}
 )
@@ -119,9 +119,10 @@ func (a *AnalyzedProgram) analyzeTrigger(n *ASTTrigger) {
 	}
 
 	n.method = a.defineMethod("@" + n.trigger + "@" + n.value + "@" + strconv.Itoa(a.triggerIndex))
+	trigger.label = n.method.entry
 	a.triggerIndex++
 
-	trigger.values = []interface{} {int64(parsed)} // TODO All value types here.
+	trigger.values = []interface{}{int64(parsed)} // TODO All value types here.
 
 	a.triggers = append(a.triggers, &trigger)
 
@@ -202,7 +203,7 @@ func (a *AnalyzedProgram) analyzeMethodExpr(n *ASTMethodExpr, m *Method) {
 
 	// Analyze method parameters
 	for i := range n.parameters {
-		a.analyzeNode(n.parameters[len(n.parameters) - i - 1], m)
+		a.analyzeNode(n.parameters[len(n.parameters)-i-1], m)
 	}
 
 	if nativeMethod != nil {
@@ -261,6 +262,7 @@ func (p *AnalyzedProgram) defineMethod(name string) *Method {
 	}
 
 	// Define entry point, drop a label.
+	// TODO this is not the analyzers responsibility (it's codegen - not analysis)
 	label := method.newLabel()
 	method.emit(label)
 	method.entry = label
@@ -268,7 +270,6 @@ func (p *AnalyzedProgram) defineMethod(name string) *Method {
 	p.methods = append(p.methods, method)
 	return method
 }
-
 
 func (m *Method) resolveVariable(name string) *LocalVariable {
 	for _, v := range m.variables {
@@ -287,13 +288,12 @@ func (a *Method) defineVariable(name string, t VariableType) *LocalVariable {
 	local := &LocalVariable{
 		name:  name,
 		index: index,
-		typ: t,
+		typ:   t,
 	}
 
 	a.variables = append(a.variables, local)
 	return local
 }
-
 
 func (p *AnalyzedProgram) defineProc(n *ASTProc) {
 	method := p.resolveMethod(n.name)
@@ -329,7 +329,7 @@ func ResolveVarType(varType string) VariableType {
 	default:
 		if strings.HasPrefix(varType, "native<") && strings.HasSuffix(varType, ">") {
 			contents := strings.Replace(strings.Replace(varType, ">", "", -1), "native<", "", -1)
-			return VariableType{builtin: false, keyword:"native", native:contents}
+			return VariableType{builtin: false, keyword: "native", native: contents}
 		}
 		return VarTypeUnresolved
 	}
@@ -358,7 +358,7 @@ func (m *Method) TypeOfNode(node ASTNode) VariableType {
 		} else {
 			panic(fmt.Errorf("cannot resolve type from LiteralExpr, unknown literal type %d", t.literalType))
 		}
-	case *ASTMethodExpr: {
+	case *ASTMethodExpr:
 		if t.local != nil {
 			panic("local method return types not supported")
 		} else if t.native != nil {
@@ -366,15 +366,22 @@ func (m *Method) TypeOfNode(node ASTNode) VariableType {
 		} else {
 			panic("no resolved local/native func: " + t.name)
 		}
-	}
-	case *ASTIdentifierExpr: {
+	case *ASTIdentifierExpr:
 		// TODO do this a bit nicer
 		resolved := m.resolveVariable(t.identifier)
 		if resolved == nil {
 			panic("cannot resolve variable " + t.identifier)
 		}
 		return resolved.typ
-	}
+	case *ASTLogicalExpr:
+		left := m.TypeOfNode(t.left)
+		right := m.TypeOfNode(t.right)
+
+		if left != right {
+			panic("cannot compute value of " + left.String() + " and " + right.String())
+		}
+
+		return left
 	}
 
 	panic(fmt.Sprintf("cannot resolve type of node: %T", node))

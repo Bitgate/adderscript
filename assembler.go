@@ -25,7 +25,6 @@ type Instruction struct {
 }
 
 func (a *Assembler) AssembleProgram() {
-	println(a.program.Nodes)
 	for _, v := range a.program.Nodes {
 		a.assembleNode(v, nil)
 	}
@@ -59,6 +58,8 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 		a.assembleBlock(n, method)
 	case *ASTVarDeclaration:
 		a.assembleVarDecl(n, method)
+	case *ASTVarAssign:
+		a.assembleVarAssign(n, method)
 	case *ASTMethodExpr:
 		a.assembleMethodExpr(n, method)
 	case *ASTLiteralExpr:
@@ -75,11 +76,6 @@ func (a *Assembler) assembleNode(node ASTNode, method *Method) {
 }
 
 func (a *Assembler) assembleTrigger(n *ASTTrigger) {
-	// Add label to method entrance
-	label := n.method.newLabel()
-	n.method.emit(label)
-	n.entry.label = label
-
 	// Assemble the code belonging to this call
 	a.assembleNode(n.statement, n.method)
 
@@ -142,6 +138,27 @@ func (a *Assembler) assembleVarDecl(n *ASTVarDeclaration, m *Method) {
 	}
 }
 
+func (a *Assembler) assembleVarAssign(n *ASTVarAssign, m *Method) {
+	local := m.resolveVariable(n.varName)
+
+	if local == nil {
+		panic("undeclared variable " + n.varName)
+	}
+
+	// Assemble the node first so it resolves the type
+	a.assembleNode(n.varValue, m)
+
+	// Now verify that type against the variable type
+	exprType := m.TypeOfNode(n.varValue)
+
+	// Verify types
+	if exprType != local.typ {
+		panic("assigning wrong type to '" + local.typ.String() + " " + n.varName + "' (passed: " + exprType.String() + ")")
+	}
+
+	m.emit(instr(op_setlocal, local.index))
+}
+
 func (a *Assembler) assembleMethodExpr(n *ASTMethodExpr, m *Method) {
 	// Assemble method parameters
 	for i := range n.parameters {
@@ -162,6 +179,16 @@ func (a *Assembler) assembleLogicalExpr(n *ASTLogicalExpr, m *Method) {
 	switch n.comparator {
 	case tokenEqual:
 		m.emitOp(op_eq)
+	case tokenPlus:
+		m.emitOp(op_add)
+	case tokenMinus:
+		m.emitOp(op_sub)
+	case tokenMultiply:
+		m.emitOp(op_mul)
+	case tokenDivide:
+		m.emitOp(op_div)
+	case tokenModulo:
+		m.emitOp(op_mod)
 	default:
 		panic("unknown comparator node! " + strconv.Itoa(int(n.comparator)))
 	}

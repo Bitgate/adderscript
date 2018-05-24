@@ -156,7 +156,7 @@ func (p *parser) parseStatement() ASTNode {
 		if peek.tokenType == tokenLParen {
 			return p.parseMethodCall()
 		} else if peek.tokenType == tokenAssign {
-			panic("var assign not added")
+			return p.parseVarAssign()
 		} else {
 			return p.parseVarDecl()
 		}
@@ -239,6 +239,15 @@ func (p *parser) parseVarDecl() ASTNode {
 	return newAssignment(varType.value, varName.value, varValue)
 }
 
+func (p *parser) parseVarAssign() ASTNode {
+	varName := p.expectConsume(tokenIdentifier, "variable name")
+	p.expectConsume(tokenAssign, "'='")
+	varValue := p.parseExpression()
+	p.expectConsume(tokenSemicolon, "';'")
+
+	return newVarAssign(varName.value, varValue)
+}
+
 func (p *parser) parseBlockStatement() ASTNode {
 	p.expectConsume(tokenLBrack, "'{'")
 
@@ -283,8 +292,32 @@ func (p *parser) parseEquality() ASTNode {
 }
 
 func (p *parser) parseRelational() ASTNode {
-	left := p.parseTerminalExpression()
+	left := p.parseAddSubtract()
 	for isRelationalOperator(p.peek(0).tokenType) {
+		operator := p.next()
+		right := p.parseAddSubtract()
+		left = newLogicalExpr(left, operator.tokenType, right)
+	}
+
+	return left
+}
+
+func (p *parser) parseAddSubtract() ASTNode {
+	left := p.parseMulDivide()
+
+	for isAddOrSubtract(p.peek(0).tokenType) {
+		operator := p.next()
+		right := p.parseMulDivide()
+		left = newLogicalExpr(left, operator.tokenType, right)
+	}
+
+	return left
+}
+
+func (p *parser) parseMulDivide() ASTNode {
+	left := p.parseTerminalExpression()
+
+	for isMultiplyOrDivide(p.peek(0).tokenType) {
 		operator := p.next()
 		right := p.parseTerminalExpression()
 		left = newLogicalExpr(left, operator.tokenType, right)
@@ -303,6 +336,14 @@ func isEqualityOperator(t tokenType) bool {
 
 func isRelationalOperator(t tokenType) bool {
 	return t == tokenLessThan || t == tokenLessOrEqual || t == tokenGreaterThan || t == tokenGreaterOrEqual
+}
+
+func isAddOrSubtract(t tokenType) bool {
+	return t == tokenPlus || t == tokenMinus
+}
+
+func isMultiplyOrDivide(t tokenType) bool {
+	return t == tokenMultiply || t == tokenDivide
 }
 
 func (p *parser) parseTerminalExpression() ASTNode {

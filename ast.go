@@ -17,6 +17,7 @@ const (
 	TypeIfStmt
 	TypeLogicalExpr
 	TypeIdentifierExpr  // Can be either a var or a method ref
+	TypeVarAssign
 )
 
 type ASTNode interface {
@@ -33,7 +34,7 @@ type ASTTrigger struct {
 	value     string
 	statement ASTNode
 
-	entry *Trigger
+	entry  *Trigger
 	method *Method
 }
 
@@ -190,6 +191,20 @@ func newIfStmt(condition ASTNode, ifTrue ASTNode, ifFalse ASTNode) *ASTIfStmt {
 		condition: condition,
 		ifTrue:    ifTrue,
 		ifFalse:   ifFalse,
+	}
+}
+
+type ASTVarAssign struct {
+	ASTType
+	varName  string
+	varValue ASTNode
+}
+
+func newVarAssign(varName string, varValue ASTNode) *ASTVarAssign {
+	return &ASTVarAssign{
+		ASTType:  TypeVarAssign,
+		varName:  varName,
+		varValue: varValue,
 	}
 }
 

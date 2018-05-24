@@ -12,5 +12,11 @@ const (
 	op_eq                = 6
 	op_call              = 7
 	op_nativecall        = 8
-	op_label             = 255
+	op_add               = 9
+	op_sub               = 10
+	op_div               = 11
+	op_mul               = 12
+	op_mod               = 13
+
+	op_label = 255
 )

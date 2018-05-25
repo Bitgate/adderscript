@@ -69,6 +69,21 @@ func (t BaseType) ResolveField(name string) *TypeField {
 	return nil
 }
 
+func (t BaseType) ResolveMethod(name string) *TypeMethod {
+	// Don't lookup when there are no fields.
+	if t.Methods == nil {
+		return nil
+	}
+
+	for _, v := range t.Methods {
+		if v.Name == name {
+			return &v
+		}
+	}
+
+	return nil
+}
+
 type TypeField struct {
 	Type BaseType
 	Name string
